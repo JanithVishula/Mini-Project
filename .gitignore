@@ -1,0 +1,27 @@
+# Dependencies - huge, always re-downloadable
+node_modules/
+
+# TypeScript compiled output
+dist/
+build/
+
+# Environment variables - NEVER commit secrets
+
+# Why .env.example is NOT ignored: Later each service will have a .env file 
+# with real secrets (passwords, API keys). We never commit those. 
+# But we commit a .env.example with fake placeholder values so other developers 
+# know what variables they need to set up. 
+# This is standard professional practice.
+
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
