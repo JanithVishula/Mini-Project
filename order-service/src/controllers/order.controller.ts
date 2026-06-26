@@ -3,6 +3,9 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import prisma from '../prisma';
 import { getRestaurantWithMenu } from '../services/restaurant.service';
 
+import { publishEvent } from '../kafka/producer';
+
+
 export async function placeOrder(req: AuthRequest, res: Response) {
   const { restaurantId, items, deliveryAddress } = req.body;
   const token = req.headers['authorization']!.split(' ')[1];
@@ -49,6 +52,8 @@ export async function placeOrder(req: AuthRequest, res: Response) {
     },
     include: { items: true }
   });
+
+  await publishEvent(order.customerId, 'ORDER_PLACED', { orderId: order.id });
 
   res.status(201).json(order);
 }
@@ -102,6 +107,8 @@ export async function updateOrderStatus(req: AuthRequest, res: Response) {
     data: { status }
   });
 
+  await publishEvent(updated.customerId, `ORDER_${status}`, { orderId: updated.id });
+
   res.json(updated);
 }
 
@@ -128,6 +135,8 @@ export async function cancelOrder(req: AuthRequest, res: Response) {
     where: { id },
     data: { status: 'CANCELLED' }
   });
+
+  await publishEvent(updated.customerId, 'ORDER_CANCELLED', { orderId: updated.id });
 
   res.json(updated);
 }

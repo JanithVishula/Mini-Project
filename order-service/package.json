@@ -3,11 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-  "dev": "nodemon --exec ts-node src/index.ts",
-  "build": "tsc",
-  "start": "node dist/index.js"
-}
-,
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -21,6 +20,7 @@
     "express": "^5.2.1",
     "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
+    "kafkajs": "^2.2.4",
     "pg": "^8.22.0"
   },
   "devDependencies": {

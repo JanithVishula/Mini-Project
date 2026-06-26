@@ -1,0 +1,20 @@
+{
+  "name": "mini-project",
+  "version": "1.0.0",
+  "description": "A microservices-based food delivery application built with Node.js, TypeScript, PostgreSQL, Docker, and React.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JanithVishula/Mini-Project.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JanithVishula/Mini-Project/issues"
+  },
+  "homepage": "https://github.com/JanithVishula/Mini-Project#readme"
+}

@@ -4,6 +4,9 @@ import helmet from 'helmet';
 import * as dotenv from 'dotenv';
 import orderRoutes from './routes/order.routes';
 
+import { connectProducer } from './kafka/producer';
+
+
 dotenv.config();
 
 const app = express();
@@ -21,4 +24,6 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Order service running on port ${PORT}`);
+  connectProducer().catch(err => console.error('Producer connect failed:', err));
 });
+
