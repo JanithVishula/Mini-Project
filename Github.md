@@ -10,19 +10,11 @@ git commit -m "feat: add order-service"
 git push origin master
 
 ---------------------------------
-Step 2 — Create the dev branch
-
-git branch dev
-What this does: Creates a new branch called dev that points to the exact same commit master is on. It does NOT switch you to it — you're still on master. Think of it as making a copy of the current bookmark.
-
----------------------------------
 
 Step 3 — Switch to the dev branch
 
 git checkout dev
 What this does: Moves you onto the dev branch. Now any commits you make go to dev, leaving master untouched and stable.
-
-(You can combine Steps 2 and 3 into one command: git checkout -b dev — the -b means "create and switch.")
 
 ---------------------------------
 
