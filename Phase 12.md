@@ -744,3 +744,179 @@ c) 4 services crashed: "datasource.url property is required ... migrate deploy"
                         END OF PHASE 12 CONCEPTS
 ================================================================================
 
+
+
+
+================================================================================
+        PHASE 12 — FINAL PART: MERGING KONG INTO THE MASTER COMPOSE
+================================================================================
+
+After the 5 services were containerized and had their tables, the last step was
+bringing Kong (the API gateway) into the SAME master docker-compose.yml so that
+`docker compose up` starts the ENTIRE system — gateway included.
+
+
+--------------------------------------------------------------------------------
+A. WHY KONG WASN'T IN THE MASTER COMPOSE AT FIRST
+--------------------------------------------------------------------------------
+
+Sequencing, not a technical reason:
+  Phase 8  → made docker-compose.kafka.yml (Kafka alone)
+  Phase 9  → made docker-compose.kong.yml  (Kong + its DB alone)
+  Phase 12 → master docker-compose.yml got postgres + kafka + 5 services,
+             but Kong was LEFT OUT until the services were containerized.
+
+Why left out: Kong needed the services to be containers FIRST, so it could route
+to them by CONTAINER NAME (auth-service:3001) instead of host.docker.internal.
+Postgres + Kafka were included immediately because services can't run without them.
+
+
+--------------------------------------------------------------------------------
+B. WHAT WE MERGED IN
+--------------------------------------------------------------------------------
+
+Added three services to the master compose (inside the same `services:` block):
+  kong-database    → PostgreSQL holding Kong's config (stateful → needs a volume)
+  kong-migrations  → runs `kong migrations bootstrap` ONCE, creates Kong's tables, exits
+  kong             → the gateway itself (ports 8000 proxy, 8001 admin)
+
+And added kong-db-data to the `volumes:` block at the bottom.
+
+Changes vs the old separate kong file:
+  - removed `extra_hosts: host.docker.internal` (not needed — one network now)
+  - removed `ports: 5433:5432` on kong-database (only Kong talks to it internally)
+
+YAML STRUCTURE RULE (a bug we hit):
+  A compose file has ONE `services:` block (all services under it) and ONE
+  `volumes:` block AT THE VERY END. When pasting Kong in, the `volumes:` block
+  accidentally landed in the MIDDLE, splitting the services → invalid YAML.
+  Fix: all services together under `services:`, single `volumes:` at the end.
+  Validate with:  docker compose config --quiet   (silent = valid)
+
+
+--------------------------------------------------------------------------------
+C. KONG'S CONFIG LIVES IN ITS DATABASE, NOT THE COMPOSE FILE
+--------------------------------------------------------------------------------
+
+KEY INSIGHT:
+  Compose file  → defines HOW to run Kong (image, ports, its database)
+  Kong database → stores WHAT Kong routes (services, routes, plugins)
+
+So even after merging Kong into compose, its stored config still pointed at the
+OLD host.docker.internal URLs. Merging the compose file alone does NOT fix that.
+You must UPDATE the URLs via Kong's Admin API (port 8001).
+
+
+--------------------------------------------------------------------------------
+D. RE-POINTING KONG TO CONTAINER NAMES (Admin API)
+--------------------------------------------------------------------------------
+
+Before:  each Kong service → http://host.docker.internal:300X/...
+After:   each Kong service → http://<container-name>:300X/...
+
+Done with a PATCH per service (updates just the `host` field):
+
+  auth-service         host → auth-service
+  restaurant-service   host → restaurant-service
+  order-service        host → order-service
+  delivery-service     host → delivery-service
+  notification-service host → notification-service
+
+PowerShell (PATCH needs an explicit JSON content-type, or you get 415):
+
+  $services = "auth-service","restaurant-service","order-service",
+              "delivery-service","notification-service"
+  foreach ($svc in $services) {
+    $body = @{ host = $svc } | ConvertTo-Json
+    Invoke-RestMethod -Uri "http://localhost:8001/services/$svc" `
+      -Method Patch -ContentType "application/json" -Body $body
+  }
+
+NOTE: Kong's config SURVIVED because kong-database uses a volume. That's why the
+5 services were already there (just with the old host) after the merge — we only
+needed to update the host, not recreate everything.
+
+
+--------------------------------------------------------------------------------
+E. THE auth-service IMAGE BUG (important lesson)
+--------------------------------------------------------------------------------
+
+Symptom:  requests through Kong to /api/auth returned 404 "Cannot POST /auth/register".
+Diagnosis path:
+  - Kong routing looked correct (strip_path true, right paths)
+  - Checked the container logs → auth-service printed:
+        "Delivery service running on port 3001"   ← WRONG identity!
+  - `docker image inspect quickbite-auth-service` → EXPOSE was 3004 (delivery's port)
+
+ROOT CAUSE:
+  The `quickbite-auth-service` IMAGE had been built from the DELIVERY-service code
+  during an earlier rebuild (wrong build context / stale layer). The image name
+  was auth, but the code inside was delivery.
+
+FIX:
+  docker build --no-cache -t quickbite-auth-service ./auth-service
+  docker compose up -d --force-recreate auth-service
+  (--no-cache forces a clean build so no stale/wrong layer is reused)
+
+LESSON:
+  An image's NAME does not guarantee its CONTENTS — always confirm a container is
+  actually running the right code (check its startup log). This exact class of bug
+  is what CI/CD prevents: it rebuilds every image fresh from the correct source on
+  every push, so a wrong/stale local image can never sneak into production.
+
+
+--------------------------------------------------------------------------------
+F. STARTING THE FULL MERGED STACK
+--------------------------------------------------------------------------------
+
+  # stop the OLD standalone Kong so it doesn't clash on ports 8000/8001
+  docker compose -f docker-compose.kong.yml down
+
+  # bring up EVERYTHING from the master compose
+  docker compose up -d
+
+  # verify (expect ~9 running + kong-migrations "Exited (0)")
+  docker compose ps
+
+
+--------------------------------------------------------------------------------
+G. FINAL VERIFICATION — THE FULL CHAIN WORKS
+--------------------------------------------------------------------------------
+
+Proven end-to-end through Kong (port 8000):
+  ✅ POST /api/auth/register  → routed to auth-service:3001 → user created in DB
+  ✅ POST /api/auth/login     → returned a JWT token
+  ✅ GET  /api/restaurants    → JWT-protected, routed to restaurant-service, worked
+     → cross-service JWT auth works (token issued by auth, verified by restaurant)
+
+The complete request path:
+  client → Kong :8000 → /api/auth route → strip /api/auth → append to service path
+         → auth-service:3001/auth/register (CONTAINER NAME) → service → Postgres
+         → response back through Kong
+
+
+--------------------------------------------------------------------------------
+H. PHASE 12 — FINAL STATE
+--------------------------------------------------------------------------------
+
+  docker compose up   → starts the ENTIRE system:
+
+    Kong :8000 (gateway) + kong-database (config)
+    auth / restaurant / order / delivery / notification  (5 services)
+    postgres (5 databases + tables) + kafka (events)
+    all on ONE Docker network, talking by container name
+    data persists in volumes (postgres-data, kafka-data, kong-db-data)
+
+  Bugs hunted & fixed during Phase 12:
+    - npm ECONNRESET during build          → npm retry config in Dockerfile
+    - wrong import name (eventMessages)     → caught by strict Linux build
+    - missing prisma.config.ts in image     → added COPY line to stage 2
+    - auth image built from delivery code   → rebuilt with --no-cache
+    - Kong PATCH 415                         → added JSON content-type
+    - Kong URLs host.docker.internal         → re-pointed to container names via Admin API
+
+
+================================================================================
+                    END OF PHASE 12 (FULLY COMPLETE)
+================================================================================
+
