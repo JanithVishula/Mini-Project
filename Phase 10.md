@@ -4,7 +4,6 @@ Goal: Write automated tests so you can change code with confidence. This is the 
 Why testing matters (the real reason)
 Right now, every time you change code, you manually test in Postman. That's slow and you forget edge cases. Worse — when you change one thing, you might break something else and not notice.
 
-
 Without tests:  change code → manually click through Postman → hope nothing else broke
 With tests:     change code → run `npm test` → instantly know if ANYTHING broke
 Tests are a safety net. They let you refactor fearlessly because if you break something, a test fails immediately and tells you exactly what.

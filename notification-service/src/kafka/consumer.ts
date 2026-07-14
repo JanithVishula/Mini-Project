@@ -1,7 +1,7 @@
 import { Kafka } from 'kafkajs';
 import * as dotenv from 'dotenv';
 import prisma from '../prisma';
-import { buildNotification } from '../eventMessages';
+import { buildNotification } from '../eventMessage';
 
 dotenv.config();
 
