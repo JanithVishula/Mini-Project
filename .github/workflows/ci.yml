@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+
+jobs:
+  test:
+    name: Build & Test Services
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - auth-service
+          - restaurant-service
+          - order-service
+          - delivery-service
+          - notification-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.service }}
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: ${{ matrix.service }}
+        run: npx prisma generate
+        continue-on-error: true
+
+      - name: TypeScript compile check
+        working-directory: ${{ matrix.service }}
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        working-directory: ${{ matrix.service }}
+        run: npm test --if-present
